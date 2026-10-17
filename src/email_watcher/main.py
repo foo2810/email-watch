@@ -221,18 +221,11 @@ def fetch_emails_by_uids(
 ##### Watcher #####
 
 def handle_one_new_email(email_msg: email.message.EmailMessage):
-    print(f"{email_msg}")
+    print(f"{email_msg}", end="\0", flush=True)
 
 def handle_new_emails(email_msg_list: list[email.message.EmailMessage]):
-    print("-"*5 + " New Emails " + "-"*54)
-    *msgs, last_msg = email_msg_list
-    for msg in msgs:
-        msg_id = msg["Message-ID"]
-        print(f"~~~~~ START of {msg_id} ~~~~~")
+    for msg in email_msg_list:
         handle_one_new_email(msg)
-        print(f"~~~~~ END of {msg_id} ~~~~~")
-    handle_one_new_email(last_msg)
-    print("-"*71)
 
 def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
     uids_prev = fetchall_email_uid(imap_handler, mailbox)
