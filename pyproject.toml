@@ -29,7 +29,7 @@ lines-after-imports = 2
 [tool.pyright]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
-include = ["main.py"]
+include = ["src"]
 reportAttributeAccessIssue = "none"
 reportMissingTypeStubs = "none"
 reportUnknownArgumentType = "none"
