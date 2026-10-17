@@ -1,7 +1,13 @@
 #!/bin/python
 
 """
-Run: email-watch -h <IMAP server> -p <port> -u <username or email address> -P <password file> 2>/dev/null | ./watch-emails.py
+Run:
+$ email-watch \
+    -h <IMAP server> \
+    -p <port> \
+    -u <username or email address> \
+    -P <password file> 2>/dev/null \
+    | ./watch-emails.py
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ def main():
     remaining_str = ""
 
     while True:
-        input_binary = sys.stdin.buffer.read1()
+        input_binary = sys.stdin.buffer.read1() # ty: ignore[unresolved-attribute]
 
         if len(input_binary) == 0:
             continue

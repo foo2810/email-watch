@@ -10,7 +10,7 @@ import sys
 import traceback
 from imaplib import IMAP4, IMAP4_SSL
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 
 
 ##### Logging #####
@@ -61,7 +61,7 @@ PREFIX_TABLE = {
 
 def enable_systemd_logging() -> None:
     global LOGGING_TYPE
-    LOGGING_TYPE = _LoggingType.SYSTEMD
+    LOGGING_TYPE = _LoggingType.SYSTEMD # pyright: ignore[reportConstantRedefinition]
 
 def info(msg: str, end: str = "\n"):
     global LOGGING_TYPE
@@ -160,6 +160,7 @@ def imap_decode(encoded_str: str) -> str:
 def fetchall_email_uid(imap_handler: IMAP4, mailbox: str) -> list[int] | None:
     imap_handler.select(mailbox)
 
+    data = None
     try:
         status, data = imap_handler.fetch("1:*", "UID")
     except IMAP4.error as e:
@@ -168,16 +169,22 @@ def fetchall_email_uid(imap_handler: IMAP4, mailbox: str) -> list[int] | None:
 
     debug(f"fetchall_email_uid: FETCH status: {status}")
 
-    if status != "OK":
+    if status != "OK" or data is None:
         return None
 
-    # "(<UID>)" --> <UID>
-    def converter(ent: bytes) -> int:
-        return int(ent.decode()[1:-1].split()[-1])
+    data_filed = cast(
+        list[bytes],
+        list(filter(
+            lambda ent: ent is not None and isinstance(ent, bytes),
+            data
+        ))
+    )
 
-    uids = list(map(
-        converter, filter(lambda ent: ent is not None, data)
-    ))
+    # "<NUM> (UID <UID>)" --> <UID>
+    def converter(ent: bytes) -> int:
+        return int(ent.decode().split()[-1][:-1])
+
+    uids = list(map(converter, data_filed))
 
     return uids
 
@@ -190,6 +197,7 @@ def fetch_emails_by_uids(
 
     uid_strs = list(map(str, uids))
 
+    fetched_data = None
     try:
         # Use "BODY.PEEK" not to set SEEN flag to the fetched emails
         status, fetched_data = imap_handler.uid(
@@ -201,7 +209,7 @@ def fetch_emails_by_uids(
 
     debug(f"fetch_emails_by_uids: FETCH status: {status}")
 
-    if status != "OK":
+    if status != "OK" or fetched_data is None:
         return None
 
     emails = []
@@ -237,7 +245,8 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
 
     if uids_prev:
         emails = fetch_emails_by_uids(imap_handler, uids_prev)
-        emails and handle_new_emails(emails)
+        if emails:
+            handle_new_emails(emails)
 
     while True:
         with imap_handler.idle(29*60) as idler:
@@ -254,7 +263,8 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
 
         if new_uids:
             emails = fetch_emails_by_uids(imap_handler, new_uids)
-            emails and handle_new_emails(emails)
+            if emails:
+                handle_new_emails(emails)
 
         uids_prev = uids_latest
 
@@ -363,8 +373,8 @@ def cli() -> int:
         error(f"{e}")
         print(f"{traceback.format_exc()}", file=sys.stderr)
         exit_status = 1
-    finally:
-        return exit_status
+
+    return exit_status
 
 
 if __name__ == "__main__":
