@@ -66,17 +66,17 @@ def enable_systemd_logging() -> None:
 def info(msg: str, end: str = "\n"):
     global LOGGING_TYPE
     prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.INFO]
-    _log_with_prefix(sys.stdout, prefix, f"{msg}{end}")
+    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
 
 def debug(msg: str, end: str = "\n"):
     global LOGGING_TYPE
     prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.DEBUG]
-    _log_with_prefix(sys.stdout, prefix, f"{msg}{end}")
+    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
 
 def warn(msg: str, end:str = "\n"):
     global LOGGING_TYPE
     prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.WARN]
-    _log_with_prefix(sys.stdout, prefix, f"{msg}{end}")
+    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
 
 def error(msg: str, end: str = "\n"):
     global LOGGING_TYPE
