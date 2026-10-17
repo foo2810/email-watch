@@ -1,13 +1,13 @@
 [project]
-name = "email-watcher"
+name = "email-watch"
 version = "0.1.0"
-description = "Add your description here"
+description = "Watch new emails"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = []
 
 [project.scripts]
-email-watcher = "email_watcher.main:cli"
+email-watch = "email_watch.main:cli"
 
 [dependency-groups]
 dev = [
