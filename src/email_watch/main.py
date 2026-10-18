@@ -271,11 +271,14 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
 def watch_emails(
     host: str,
     port: int,
+    use_ssl: bool,
     user: str,
     passwd: str,
     mailbox: str = "INBOX"
 ) -> bool:
-    with IMAP4_SSL(host, port) as imap_handler:
+    imap_class = IMAP4_SSL if use_ssl else IMAP4
+
+    with imap_class(host, port) as imap_handler:
         # FIXME: maybe some exceptions raised if the authentication failed
         imap_handler.login(user, passwd)
         info("Logged in succeded")
@@ -326,6 +329,10 @@ def parse_args() -> argparse.Namespace | None:
         "--mailbox", metavar="MAILBOX", dest="mailbox", type=str,
         required=False, default="INBOX", help="specify a mailbox name to watch"
     )
+    parser.add_argument(
+        "--ssl", dest="use_ssl", required=False, action="store_true",
+        help="enable SSL"
+    )
 
     args = None
     try:
@@ -354,6 +361,7 @@ def main() -> bool:
     status = watch_emails(
         args.host,
         args.port,
+        args.use_ssl,
         args.user,
         passwd,
         args.mailbox
