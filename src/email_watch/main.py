@@ -250,7 +250,10 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
 
     while True:
         with imap_handler.idle(29*60) as idler:
-            _ = next(idler) # blocking
+            try:
+                _ = next(idler) # blocking
+            except StopIteration:
+                continue
         uids_latest = fetchall_email_uid(imap_handler, mailbox)
         if uids_latest is None:
             error(f"Failed to fetch all email uids in '{mailbox}' (latest)")
