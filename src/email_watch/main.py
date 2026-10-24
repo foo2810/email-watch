@@ -225,6 +225,23 @@ def fetch_emails_by_uids(
 
     return emails
 
+def idle_wait(imap_handler: IMAP4, timeout: int) -> bool:
+    """
+    Return true when valid responses exists, otherwise return False
+    """
+    if (timeout <= 0):
+        raise ValueError("imap_wait: timeout must be positive")
+    if (timeout > 29*60):
+        warn("imap_wait: timeout is larger than 1740s. Keep timeout at most 1740s to avoid inactivity timeout on IMAP server") # noqa: E501
+
+    with imap_handler.idle(timeout) as idler:
+        try:
+            _ = next(idler) # blocking
+        except StopIteration:
+            # When IDLE is timed out, the iterator raises StopIteration
+            return False
+
+    return True
 
 ##### Watcher #####
 
@@ -249,11 +266,9 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
             handle_new_emails(emails)
 
     while True:
-        with imap_handler.idle(29*60) as idler:
-            try:
-                _ = next(idler) # blocking
-            except StopIteration:
-                continue
+        if not idle_wait(imap_handler, timeout=29*60):
+            return False
+
         uids_latest = fetchall_email_uid(imap_handler, mailbox)
         if uids_latest is None:
             error(f"Failed to fetch all email uids in '{mailbox}' (latest)")
