@@ -63,14 +63,14 @@ def enable_systemd_logging() -> None:
     global LOGGING_TYPE
     LOGGING_TYPE = _LoggingType.SYSTEMD # pyright: ignore[reportConstantRedefinition]
 
+DEBUG_LOG: bool = False
+def enable_debug_log() -> None:
+    global DEBUG_LOG
+    DEBUG_LOG = True # pyright: ignore[reportConstantRedefinition]
+
 def info(msg: str, end: str = "\n"):
     global LOGGING_TYPE
     prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.INFO]
-    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
-
-def debug(msg: str, end: str = "\n"):
-    global LOGGING_TYPE
-    prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.DEBUG]
     _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
 
 def warn(msg: str, end:str = "\n"):
@@ -81,6 +81,13 @@ def warn(msg: str, end:str = "\n"):
 def error(msg: str, end: str = "\n"):
     global LOGGING_TYPE
     prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.ERROR]
+    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
+
+def debug(msg: str, end: str = "\n"):
+    global LOGGING_TYPE, DEBUG_LOG
+    if not DEBUG_LOG:
+        return
+    prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.DEBUG]
     _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
 
 
@@ -354,6 +361,10 @@ def parse_args() -> argparse.Namespace | None:
         "--ssl", dest="use_ssl", required=False, action="store_true",
         help="enable SSL"
     )
+    parser.add_argument(
+        "--debug", dest="debug", required=False, action="store_true",
+        help="enable debug log"
+    )
 
     args = None
     try:
@@ -367,6 +378,9 @@ def main() -> bool:
     args = parse_args()
     if not args:
         return False
+
+    if args.debug:
+        enable_debug_log()
 
     debug(f"Args: {args}")
 
