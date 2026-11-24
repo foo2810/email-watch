@@ -239,6 +239,9 @@ def idle_wait(imap_handler: IMAP4, timeout: int) -> bool:
             _ = next(idler) # blocking
         except StopIteration:
             # When IDLE is timed out, the iterator raises StopIteration
+            pass
+        except Exception as e:
+            error(f"imap_wait: {e}")
             return False
 
     return True
