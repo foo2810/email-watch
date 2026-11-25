@@ -7,7 +7,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [project.scripts]
-email-watch = "email_watch.main:cli"
+email-watch = "email_watch.cli:cli"
 
 [dependency-groups]
 dev = [
@@ -22,6 +22,7 @@ line-length = 79
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+ignore = ["I001"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2

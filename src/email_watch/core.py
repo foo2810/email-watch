@@ -1,92 +1,13 @@
-import argparse
 import base64
 import email
 import email.message
 import email.policy
-import enum
-import sys
-import traceback
+
+from collections.abc import Callable
 from imaplib import IMAP4, IMAP4_SSL
-from pathlib import Path
-from typing import TextIO, cast
+from typing import cast
 
-
-##### Logging #####
-
-def _log_primitive(stream: TextIO, text: str) -> None:
-    stream.write(text)
-    stream.flush()
-
-def _log_with_prefix(stream: TextIO, prefix: str, msg: str) -> None:
-    # In multi-line messages, the second and subsequent lines do not start
-    # with the log-level prefix, so they are not recorded
-    # under an unintended log level.
-    #
-    # Implementation note:
-    # If msg is empty, msg[-1] will raise an IndexError. So use msg[-1:]
-    # instead.
-    text = msg[:-1].replace("\n", f"\n{prefix}") + msg[-1:]
-    text = f"{prefix}{text}"
-
-    _log_primitive(stream, text)
-
-class _LogLevel(enum.IntEnum):
-    ERROR = 0
-    WARN = 1
-    INFO = 2
-    DEBUG = 3
-
-class _LoggingType(enum.StrEnum):
-    NORMAL = "normal-logging"
-    SYSTEMD = "systemd-logging"
-
-LOGGING_TYPE = _LoggingType.NORMAL
-
-PREFIX_TABLE = {
-    _LoggingType.NORMAL: {
-        _LogLevel.ERROR: "Error: ",
-        _LogLevel.WARN: "Warn: ",
-        _LogLevel.INFO: "Info: ",
-        _LogLevel.DEBUG: "Debug: ",
-    },
-    _LoggingType.SYSTEMD: {
-        _LogLevel.ERROR: "<3>",
-        _LogLevel.WARN: "<4>",
-        _LogLevel.INFO: "<6>",
-        _LogLevel.DEBUG: "<7>",
-    },
-}
-
-def enable_systemd_logging() -> None:
-    global LOGGING_TYPE
-    LOGGING_TYPE = _LoggingType.SYSTEMD # pyright: ignore[reportConstantRedefinition]
-
-DEBUG_LOG: bool = False
-def enable_debug_log() -> None:
-    global DEBUG_LOG
-    DEBUG_LOG = True # pyright: ignore[reportConstantRedefinition]
-
-def info(msg: str, end: str = "\n"):
-    global LOGGING_TYPE
-    prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.INFO]
-    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
-
-def warn(msg: str, end:str = "\n"):
-    global LOGGING_TYPE
-    prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.WARN]
-    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
-
-def error(msg: str, end: str = "\n"):
-    global LOGGING_TYPE
-    prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.ERROR]
-    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
-
-def debug(msg: str, end: str = "\n"):
-    global LOGGING_TYPE, DEBUG_LOG
-    if not DEBUG_LOG:
-        return
-    prefix = PREFIX_TABLE[LOGGING_TYPE][_LogLevel.DEBUG]
-    _log_with_prefix(sys.stderr, prefix, f"{msg}{end}")
+from .logging import info, warn, error, debug
 
 
 ##### IMAP helper #####
@@ -98,6 +19,7 @@ def encode_with_modified_utf7(s: str) -> str:
         .replace("=", "") \
         .replace("/", ",")
     return f"&{mod_utf7_encoded}-"
+
 
 def decode_with_modified_utf7(s: str) -> str:
     if len(s) < 3 or s[0] != "&" or s[-1] != "-":
@@ -114,6 +36,7 @@ def decode_with_modified_utf7(s: str) -> str:
     utf16_be_encoded = base64.b64decode(mod_b64_encoded)
     decoded = utf16_be_encoded.decode("utf-16-be")
     return decoded
+
 
 def imap_encode(s: str) -> str:
     encoded_str = ""
@@ -138,6 +61,7 @@ def imap_encode(s: str) -> str:
 
     return encoded_str
 
+
 def imap_decode(encoded_str: str) -> str:
     decoded_str = ""
 
@@ -161,6 +85,7 @@ def imap_decode(encoded_str: str) -> str:
             idx += 1
 
     return decoded_str
+
 
 def fetchall_email_uid(imap_handler: IMAP4, mailbox: str) -> list[int] | None:
     imap_handler.select(mailbox)
@@ -192,6 +117,7 @@ def fetchall_email_uid(imap_handler: IMAP4, mailbox: str) -> list[int] | None:
     uids = list(map(converter, data_filed))
 
     return uids
+
 
 def fetch_emails_by_uids(
     imap_handler: IMAP4,
@@ -230,6 +156,7 @@ def fetch_emails_by_uids(
 
     return emails
 
+
 def idle_wait(imap_handler: IMAP4, timeout: int) -> bool:
     """
     Return true when valid responses exists, otherwise return False
@@ -251,16 +178,22 @@ def idle_wait(imap_handler: IMAP4, timeout: int) -> bool:
 
     return True
 
+
 ##### Watcher #####
 
-def handle_one_new_email(email_msg: email.message.EmailMessage):
-    print(f"{email_msg}", end="\0", flush=True)
-
-def handle_new_emails(email_msg_list: list[email.message.EmailMessage]):
+def handle_new_emails(
+    email_msg_list: list[email.message.EmailMessage],
+    email_handler: Callable[[email.message.EmailMessage], None]
+):
     for msg in email_msg_list:
-        handle_one_new_email(msg)
+        email_handler(msg)
 
-def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
+
+def imap4_idle_loop(
+    imap_handler: IMAP4,
+    mailbox: str,
+    email_handler: Callable[[email.message.EmailMessage], None]
+):
     uids_prev = fetchall_email_uid(imap_handler, mailbox)
     if uids_prev is None:
         # error(f"Failed to fetch all email uids in '{mailbox}' (init)")
@@ -271,7 +204,7 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
     if uids_prev:
         emails = fetch_emails_by_uids(imap_handler, uids_prev)
         if emails:
-            handle_new_emails(emails)
+            handle_new_emails(emails, email_handler)
 
     while True:
         if not idle_wait(imap_handler, timeout=29*60):
@@ -290,9 +223,10 @@ def imap4_idle_loop(imap_handler: IMAP4, mailbox: str):
         if new_uids:
             emails = fetch_emails_by_uids(imap_handler, new_uids)
             if emails:
-                handle_new_emails(emails)
+                handle_new_emails(emails, email_handler)
 
         uids_prev = uids_latest
+
 
 def watch_emails(
     host: str,
@@ -300,7 +234,8 @@ def watch_emails(
     use_ssl: bool,
     user: str,
     passwd: str,
-    mailbox: str = "INBOX"
+    mailbox: str,
+    email_handler: Callable[[email.message.EmailMessage], None]
 ) -> bool:
     imap_class = IMAP4_SSL if use_ssl else IMAP4
 
@@ -314,7 +249,7 @@ def watch_emails(
         imap_handler.select(mailbox_enc)
 
         info(f"Watching mailbox '{mailbox}'")
-        imap4_idle_loop(imap_handler, mailbox_enc)
+        imap4_idle_loop(imap_handler, mailbox_enc, email_handler)
 
         imap_handler.logout()
         info("Logged out")
@@ -322,101 +257,4 @@ def watch_emails(
     return True
 
 
-##### CLI #####
-
-def parse_args() -> argparse.Namespace | None:
-    parser = argparse.ArgumentParser(
-        description="Email watcher using IMAP",
-        add_help=False,
-        exit_on_error=False
-    )
-
-    parser.add_argument("--help", action="help", default=argparse.SUPPRESS,
-        help="show this help"
-    )
-
-    parser.add_argument(
-        "-h, --host", metavar="HOST", dest="host", type=str, required=True,
-        help="specify IMAP server"
-    )
-    parser.add_argument(
-        "-p", "--port", metavar="PORT", dest="port", type=int, required=True,
-        help="specify IMAP server port"
-    )
-    parser.add_argument(
-        "-u", "--user", metavar="USER", dest="user", type=str, required=True,
-        help="specify Login user"
-    )
-    parser.add_argument(
-        "-P", "--passwd", metavar="PASSWD_FILE", dest="passwd_file", type=Path,
-        required=True, help="specify a file that contains login password"
-    )
-    parser.add_argument(
-        "--mailbox", metavar="MAILBOX", dest="mailbox", type=str,
-        required=False, default="INBOX", help="specify a mailbox name to watch"
-    )
-    parser.add_argument(
-        "--ssl", dest="use_ssl", required=False, action="store_true",
-        help="enable SSL"
-    )
-    parser.add_argument(
-        "--debug", dest="debug", required=False, action="store_true",
-        help="enable debug log"
-    )
-
-    args = None
-    try:
-        args = parser.parse_args()
-    except argparse.ArgumentError as e:
-        error(f"{e}")
-
-    return args
-
-def main() -> bool:
-    args = parse_args()
-    if not args:
-        return False
-
-    if args.debug:
-        enable_debug_log()
-
-    debug(f"Args: {args}")
-
-    passwd: str | None = None
-    with args.passwd_file.open("r") as fp:
-        passwd = fp.read().strip()
-
-    if passwd is None:
-        error("Password is empty")
-        return False
-
-    status = True
-    status = watch_emails(
-        args.host,
-        args.port,
-        args.use_ssl,
-        args.user,
-        passwd,
-        args.mailbox
-    )
-
-    return status
-
-
-def cli() -> int:
-    exit_status = 0
-    try:
-        if not main():
-            exit_status = 1
-    except KeyboardInterrupt:
-        exit_status = 130    # 128 + SIGINT
-    except Exception as e:
-        error(f"{e}")
-        print(f"{traceback.format_exc()}", file=sys.stderr)
-        exit_status = 1
-
-    return exit_status
-
-
-if __name__ == "__main__":
-    sys.exit(cli())
+__all__ = ["watch_emails"]
